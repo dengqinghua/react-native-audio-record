@@ -28,23 +28,51 @@ RCT_EXPORT_METHOD(init:(NSDictionary *) options) {
 RCT_EXPORT_METHOD(start) {
     RCTLogInfo(@"start");
 
-    // most audio players set session category to "Playback", record won't work in this mode
-    // therefore set session category to "Record" before recording
-    [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryRecord error:nil];
+    NSError *error = nil;
+    BOOL success = [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryRecord
+                                                      withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker
+                                                            error:&error];
+    if (!success) {
+        RCTLogError(@"Error setting AVAudioSession category: %@", error.localizedDescription);
+        return;
+    }
+    
+    success = [[AVAudioSession sharedInstance] setActive:YES error:&error];
+    if (!success) {
+        RCTLogError(@"Error activating AVAudioSession: %@", error.localizedDescription);
+        return;
+    }
 
     _recordState.mIsRunning = true;
     _recordState.mCurrentPacket = 0;
     
     CFURLRef url = CFURLCreateWithString(kCFAllocatorDefault, (CFStringRef)_filePath, NULL);
-    AudioFileCreateWithURL(url, kAudioFileWAVEType, &_recordState.mDataFormat, kAudioFileFlags_EraseFile, &_recordState.mAudioFile);
+    OSStatus status = AudioFileCreateWithURL(url, kAudioFileWAVEType, &_recordState.mDataFormat, kAudioFileFlags_EraseFile, &_recordState.mAudioFile);
     CFRelease(url);
+    if (status != noErr) {
+        RCTLogError(@"Error creating audio file: %d", status);
+        return;
+    }
     
-    AudioQueueNewInput(&_recordState.mDataFormat, HandleInputBuffer, &_recordState, NULL, NULL, 0, &_recordState.mQueue);
+    status = AudioQueueNewInput(&_recordState.mDataFormat, HandleInputBuffer, &_recordState, NULL, NULL, 0, &_recordState.mQueue);
+    if (status != noErr) {
+        RCTLogError(@"Error creating audio queue: %d", status);
+        return;
+    }
+
     for (int i = 0; i < kNumberBuffers; i++) {
-        AudioQueueAllocateBuffer(_recordState.mQueue, _recordState.bufferByteSize, &_recordState.mBuffers[i]);
+        status = AudioQueueAllocateBuffer(_recordState.mQueue, _recordState.bufferByteSize, &_recordState.mBuffers[i]);
+        if (status != noErr) {
+            RCTLogError(@"Error allocating buffer: %d", status);
+            return;
+        }
         AudioQueueEnqueueBuffer(_recordState.mQueue, _recordState.mBuffers[i], 0, NULL);
     }
-    AudioQueueStart(_recordState.mQueue, NULL);
+    
+    status = AudioQueueStart(_recordState.mQueue, NULL);
+    if (status != noErr) {
+        RCTLogError(@"Error starting audio queue: %d", status);
+    }
 }
 
 RCT_EXPORT_METHOD(stop:(RCTPromiseResolveBlock)resolve
