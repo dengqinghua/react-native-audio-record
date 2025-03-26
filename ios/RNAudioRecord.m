@@ -29,9 +29,7 @@ RCT_EXPORT_METHOD(start) {
     RCTLogInfo(@"start");
 
     NSError *error = nil;
-    BOOL success = [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryRecord
-                                                      withOptions:AVAudioSessionCategoryOptionDefaultToSpeaker
-                                                            error:&error];
+    BOOL success = [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryRecord error:&error];
     if (!success) {
         RCTLogError(@"Error setting AVAudioSession category: %@", error.localizedDescription);
         return;
